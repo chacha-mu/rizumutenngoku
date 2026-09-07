@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>太鼓風リズムゲーム Prototype</title>
+    <style>
+        body {
+            background-color: #222;
+            color: #fff;
+            text-align: center;
+            font-family: sans-serif;
+        }
+        canvas {
+            background: #333;
+            border: 2px solid #fff;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+
+<h1>太鼓風リズムゲーム</h1>
+<p>【操作方法】<b>F</b> / <b>J</b> : ドン（赤） | <b>D</b> / <b>K</b> : カッ（青）</p>
+<canvas id="gameCanvas" width="800" height="200"></canvas>
+
+<script>
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+
+// Web Audio APIの準備（効果音の自動生成）
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+function playTaikoSound(type) {
+    if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+    }
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+
+    if (type === 'don') { // ドン（低い音）
+        osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
+        gain.gain.setValueAtTime(1, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
+    } else { // カッ（高い音）
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(400, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+        gain.gain.setValueAtTime(0.8, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+    }
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.15);
+}
+
+// ゲーム設定
+const JUDGE_X = 120; // 判定枠のX座標
+const LANE_Y = 100;  // レーンのY座標
+const NOTE_SPEED = 4; // ノーツの流れる速度
+
+let score = 0;
+let combo = 0;
+let judgeText = "";
+let judgeColor = "#fff";
+
+// ノーツデータ (type: 'don' または 'ka', x: 出現位置)
+const notes = [
+    { type: 'don', x: 800 },
+    { type: 'don', x: 1000 },
+    { type: 'ka',  x: 1200 },
+    { type: 'don', x: 1400 },
+    { type: 'ka',  x: 1550 },
+    { type: 'ka',  x: 1700 },
+    { type: 'don', x: 1900 },
+    { type: 'don', x: 2000 }
+];
+
+// キー入力判定
+window.addEventListener("keydown", e => {
+    const key = e.key.toLowerCase();
+    
+    if (key === 'f' || key === 'j') {
+        playTaikoSound('don');
+        checkHit('don');
+    } else if (key === 'd' || key === 'k') {
+        playTaikoSound('ka');
+        checkHit('ka');
+    }
+});
+
+function checkHit(type) {
+    for (let i = 0; i < notes.length; i++) {
+        const note = notes[i];
+        if (note.type === type) {
+            const diff = Math.abs(note.x - JUDGE_X);
+            
+            // タイミング判定
+            if (diff < 20) {
+                setJudge("PERFECT!!", "#ff0");
+                score += 1000;
+                combo++;
+                notes.splice(i, 1);
+                break;
+            } else if (diff < 45) {
+                setJudge("GREAT", "#0f0");
+                score += 500;
+                combo++;
+                notes.splice(i, 1);
+                break;
+            }
+        }
+    }
+}
+
+function setJudge(text, color) {
+    judgeText = text;
+    judgeColor = color;
+}
+
+function update() {
+    // ノーツの移動
+    for (let i = notes.length - 1; i >= 0; i--) {
+        notes[i].x -= NOTE_SPEED;
+
+        // 判定枠を通り過ぎたらMISS
+        if (notes[i].x < JUDGE_X - 50) {
+            setJudge("MISS", "#f00");
+            combo = 0;
+            notes.splice(i, 1);
+        }
+    }
+}
+
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // 1. レーン描画
+    ctx.fillStyle = "#444";
+    ctx.fillRect(0, LANE_Y - 40, canvas.width, 80);
+
+    // 2. 判定枠描画
+    ctx.strokeStyle = "#fff";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(JUDGE_X, LANE_Y, 30, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // 3. ノーツ描画
+    notes.forEach(note => {
+        ctx.beginPath();
+        ctx.arc(note.x, LANE_Y, 25, 0, Math.PI * 2);
+        ctx.fillStyle = (note.type === 'don') ? "#ff3333" : "#3399ff";
+        ctx.fill();
+        ctx.strokeStyle = "#fff";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+    });
+
+    // 4. UI描画 (スコア・コンボ・判定)
+    ctx.fillStyle = "#fff";
+    ctx.font = "20px sans-serif";
+    ctx.fillText(`SCORE: ${score}`, 20, 35);
+    ctx.fillText(`COMBO: ${combo}`, 20, 65);
+
+    ctx.fillStyle = judgeColor;
+    ctx.font = "bold 28px sans-serif";
+    ctx.fillText(judgeText, JUDGE_X - 50, LANE_Y - 50);
+}
+
+function gameLoop() {
+    update();
+    draw();
+    requestAnimationFrame(gameLoop);
+}
+
+gameLoop();
+</script>
+</body>
+</html>
