@@ -27,7 +27,7 @@
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
-// Web Audio APIの準備（効果音の自動生成）
+// Web Audio APIの準備
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
 function playTaikoSound(type) {
@@ -58,24 +58,33 @@ function playTaikoSound(type) {
 // ゲーム設定
 const JUDGE_X = 120; // 判定枠のX座標
 const LANE_Y = 100;  // レーンのY座標
-const NOTE_SPEED = 4; // ノーツの流れる速度
+const NOTE_SPEED = 5; // ノーツの流れる速度
 
 let score = 0;
 let combo = 0;
 let judgeText = "";
 let judgeColor = "#fff";
 
-// ノーツデータ (type: 'don' または 'ka', x: 出現位置)
-const notes = [
-    { type: 'don', x: 800 },
-    { type: 'don', x: 1000 },
-    { type: 'ka',  x: 1200 },
-    { type: 'don', x: 1400 },
-    { type: 'ka',  x: 1550 },
-    { type: 'ka',  x: 1700 },
-    { type: 'don', x: 1900 },
-    { type: 'don', x: 2000 }
-];
+// ノーツデータと初期生成用の変数
+const notes = [];
+let lastNoteX = 800; // 最後に生成したノーツのX座標
+
+// ランダムに1つのノーツを生成して追加する関数
+function addRandomNote() {
+    const types = ['don', 'ka'];
+    const randomType = types[Math.floor(Math.random() * types.length)];
+    
+    // ノーツ間の距離をランダムに設定（120px〜250px）
+    const randomGap = Math.floor(Math.random() * 130) + 120;
+    lastNoteX += randomGap;
+
+    notes.push({ type: randomType, x: lastNoteX });
+}
+
+// 最初に30個のノーツをランダム生成
+for (let i = 0; i < 30; i++) {
+    addRandomNote();
+}
 
 // キー入力判定
 window.addEventListener("keydown", e => {
@@ -96,18 +105,19 @@ function checkHit(type) {
         if (note.type === type) {
             const diff = Math.abs(note.x - JUDGE_X);
             
-            // タイミング判定
             if (diff < 20) {
                 setJudge("PERFECT!!", "#ff0");
                 score += 1000;
                 combo++;
                 notes.splice(i, 1);
+                addRandomNote(); // 1つ消えたら後ろに新しく1つ追加
                 break;
             } else if (diff < 45) {
                 setJudge("GREAT", "#0f0");
                 score += 500;
                 combo++;
                 notes.splice(i, 1);
+                addRandomNote(); // 1つ消えたら後ろに新しく1つ追加
                 break;
             }
         }
@@ -129,6 +139,7 @@ function update() {
             setJudge("MISS", "#f00");
             combo = 0;
             notes.splice(i, 1);
+            addRandomNote(); // MISSで消えた場合も後ろに補填
         }
     }
 }
@@ -149,16 +160,19 @@ function draw() {
 
     // 3. ノーツ描画
     notes.forEach(note => {
-        ctx.beginPath();
-        ctx.arc(note.x, LANE_Y, 25, 0, Math.PI * 2);
-        ctx.fillStyle = (note.type === 'don') ? "#ff3333" : "#3399ff";
-        ctx.fill();
-        ctx.strokeStyle = "#fff";
-        ctx.lineWidth = 2;
-        ctx.stroke();
+        // 画面内（少し外側含む）にあるノーツだけ描画して軽くする
+        if (note.x > -50 && note.x < canvas.width + 50) {
+            ctx.beginPath();
+            ctx.arc(note.x, LANE_Y, 25, 0, Math.PI * 2);
+            ctx.fillStyle = (note.type === 'don') ? "#ff3333" : "#3399ff";
+            ctx.fill();
+            ctx.strokeStyle = "#fff";
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
     });
 
-    // 4. UI描画 (スコア・コンボ・判定)
+    // 4. UI描画
     ctx.fillStyle = "#fff";
     ctx.font = "20px sans-serif";
     ctx.fillText(`SCORE: ${score}`, 20, 35);
